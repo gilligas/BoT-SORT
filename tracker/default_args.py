@@ -12,7 +12,7 @@ parser.add_argument("--device", default="gpu", type=str, help="device to run our
 parser.add_argument("--conf", default=None, type=float, help="test conf")
 parser.add_argument("--nms", default=None, type=float, help="test nms threshold")
 parser.add_argument("--tsize", default=None, type=int, help="test img size")
-parser.add_argument("--fps", default=30, type=int, help="frame rate (fps)")
+parser.add_argument("--fps", default=5, type=int, help="frame rate (fps)")
 parser.add_argument("--fp16", dest="fp16", default=False, action="store_true",help="Adopting mix precision evaluating.")
 parser.add_argument("--fuse", dest="fuse", default=False, action="store_true", help="Fuse conv and bn for testing.")
 parser.add_argument("--trt", dest="trt", default=False, action="store_true", help="Using TensorRT model for testing.")
@@ -27,7 +27,7 @@ parser.add_argument('--min_box_area', type=float, default=10, help='filter out t
 parser.add_argument("--fuse-score", dest="fuse_score", default=False, action="store_true", help="fuse score and iou for association")
 
 # CMC
-parser.add_argument("--cmc-method", default="sparseOptFlow", type=str, help="cmc method: sparseOptFlow | files (Vidstab GMC) | orb | ecc")
+parser.add_argument("--cmc-method", default="none", type=str, help="cmc method: sparseOptFlow | files (Vidstab GMC) | orb | ecc")
 
 # ReID
 parser.add_argument("--with-reid", dest="with_reid", default=False, action="store_true", help="use reid model")

@@ -226,7 +226,7 @@ class STrack(BaseTrack):
 
 
 class BoTSORT(object):
-    def __init__(self, args, frame_rate=30):
+    def __init__(self, args, frame_rate=5):
 
         self.tracked_stracks = []  # type: list[STrack]
         self.lost_stracks = []  # type: list[STrack]
@@ -443,8 +443,19 @@ class BoTSORT(object):
 
 
         return output_stracks
-
-
+    
+    def get_tracks_np(self):
+        tracks = []
+        for track in self.tracked_stracks:
+            tracks.append([track.tlwh[0],
+                            track.tlwh[1],
+                            track.tlwh[0]+track.tlwh[2],
+                            track.tlwh[1]+track.tlwh[3], 
+                            track.score, 
+                            0, 
+                            track.track_id])
+        return np.array(tracks)
+    
 def joint_stracks(tlista, tlistb):
     exists = {}
     res = []
