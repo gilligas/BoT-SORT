@@ -35,6 +35,7 @@ class STrack(BaseTrack):
             self.update_features(feat)
         self.features = deque([], maxlen=feat_history)
         self.alpha = 0.9
+        self.path_history = []
 
     def update_features(self, feat):
         feat /= np.linalg.norm(feat)
@@ -145,7 +146,11 @@ class STrack(BaseTrack):
         self.frame_id = frame_id
         self.tracklet_len += 1
 
+
         new_tlwh = new_track.tlwh
+        print(new_tlwh)
+
+        self.path_history.append(self.tlwh_to_bec(new_tlwh))
 
         self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_tlwh))
 
@@ -157,6 +162,12 @@ class STrack(BaseTrack):
 
         self.score = new_track.score
         self.update_cls(new_track.cls, new_track.score)
+
+    @staticmethod
+    def tlwh_to_bec(tlwh):
+        """Convert bounding box to bottom edge center (x,y) format."""
+        return np.array([tlwh[0] + tlwh[2]/2, tlwh[1] + tlwh[3]])
+
 
     @property
     def tlwh(self):
