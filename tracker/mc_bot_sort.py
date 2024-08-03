@@ -40,6 +40,11 @@ class STrack(BaseTrack):
         self.path_history = []
         self.in_roi = False
         self.last_crossing = 0
+        self.was_in_roi = False
+        self.in_crossing_id = None
+        self.was_out_roi = False
+        self.out_crossing_id = None
+
 
     def update_features(self, feat):
         feat /= np.linalg.norm(feat)
@@ -167,9 +172,109 @@ class STrack(BaseTrack):
         self.score = new_track.score
         self.update_cls(new_track.cls, new_track.score)
 
-        # print("roi", self.roi)
-        # print("bec",bec)
-        # print("in_roi", self.point_in_roi(bec, self.roi))
+        in_roi = self.point_in_roi(bec, self.roi)
+        
+        if in_roi:
+            self.in_roi = True
+            self.was_in_roi = True
+
+            if self.was_out_roi:
+                if self.in_crossing_id is None:
+                    self.in_crossing_id = self.check_crossing(self.path_history, self.roi, leaving=False)
+                    print("Entering roi via crossing", self.in_crossing_id)
+
+        else:
+            self.was_out_roi = True
+            self.in_roi = False
+
+    def track_left(self):
+        if self.was_in_roi:
+            self.out_crossing_id = self.check_crossing(self.path_history, self.roi, leaving=True)
+            print("Leaving roi via crossing", self.out_crossing_id)
+
+    
+    @staticmethod
+    def check_crossing(path, polygon, leaving = True):
+
+        num_vertices = len(polygon)
+        lines = [(polygon[i], polygon[i - 1]) for i in range(num_vertices)]
+        path_len = len(path)
+        cross_id = None
+
+        for j in range(path_len-1):
+            for i in range(len(lines)):
+                roi_line = lines[i]
+                if not leaving:
+                    path_line = (path[j], path[j+1])
+                else:
+                    path_line = (path[-j-1], path[-j-2])
+                #check if path_line crosses roi_line
+                if STrack.do_intersect(path_line, roi_line):
+                    cross_id = i
+                    break
+            if cross_id is not None:
+                break
+
+        return cross_id
+
+    
+    @staticmethod
+    def orientation(p, q, r):
+        """Return the orientation of the triplet (p, q, r).
+        0 -> p, q and r are collinear
+        1 -> Clockwise
+        2 -> Counterclockwise
+        """
+        val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1])
+        if val == 0:
+            return 0
+        elif val > 0:
+            return 1
+        else:
+            return 2
+
+    @staticmethod
+    def on_segment(p, q, r):
+        """Check if point r lies on segment pq."""
+        if min(p[0], q[0]) <= r[0] <= max(p[0], q[0]) and min(p[1], q[1]) <= r[1] <= max(p[1], q[1]):
+            return True
+        return False
+
+    @staticmethod
+    def do_intersect(seg1, seg2):
+        p1, q1 = seg1
+        p2, q2 = seg2
+
+        # Find the four orientations needed for the general and special cases
+        o1 = STrack.orientation(p1, q1, p2)
+        o2 = STrack.orientation(p1, q1, q2)
+        o3 = STrack.orientation(p2, q2, p1)
+        o4 = STrack.orientation(p2, q2, q1)
+
+        # General case
+        if o1 != o2 and o3 != o4:
+            return True
+
+        # Special cases
+        # p1, q1 and p2 are collinear and p2 lies on segment p1q1
+        if o1 == 0 and STrack.on_segment(p1, q1, p2):
+            return True
+
+        # p1, q1 and q2 are collinear and q2 lies on segment p1q1
+        if o2 == 0 and STrack.on_segment(p1, q1, q2):
+            return True
+
+        # p2, q2 and p1 are collinear and p1 lies on segment p2q2
+        if o3 == 0 and STrack.on_segment(p2, q2, p1):
+            return True
+
+        # p2, q2 and q1 are collinear and q1 lies on segment p2q2
+        if o4 == 0 and STrack.on_segment(p2, q2, q1):
+            return True
+
+        # Doesn't fall in any of the above cases
+        return False
+
 
     @staticmethod
     def point_in_roi(point, polygon):
@@ -365,9 +470,12 @@ class BoTSORT(object):
             if not track.is_activated:
                 #create track
                 unconfirmed.append(track)
-                track.roi = self.roi
             else:
                 tracked_stracks.append(track)
+            
+            #TODO this is not very elegant
+            if not track.roi:
+                track.roi = self.roi
             
         ''' Step 2: First association, with high score detection boxes'''
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
@@ -467,8 +575,10 @@ class BoTSORT(object):
             unconfirmed[itracked].update(detections[idet], self.frame_id)
             activated_starcks.append(unconfirmed[itracked])
         for it in u_unconfirmed:
+            #Removed Tracks
             track = unconfirmed[it]
             track.mark_removed()
+            track.track_left()
             removed_stracks.append(track)
 
         """ Step 4: Init new stracks"""
@@ -483,8 +593,11 @@ class BoTSORT(object):
         """ Step 5: Update state"""
         for track in self.lost_stracks:
             if self.frame_id - track.end_frame > self.max_time_lost:
+                #Removed Tracks
                 track.mark_removed()
+                track.track_left()
                 removed_stracks.append(track)
+
 
         """ Merge """
         self.tracked_stracks = [t for t in self.tracked_stracks if t.state == TrackState.Tracked]
