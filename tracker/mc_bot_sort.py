@@ -154,8 +154,7 @@ class STrack(BaseTrack):
         """
         self.frame_id = frame_id
         self.tracklet_len += 1
-
-
+        
         new_tlwh = new_track.tlwh
         bec = self.tlwh_to_bec(new_tlwh)
 
@@ -172,32 +171,44 @@ class STrack(BaseTrack):
         self.score = new_track.score
         self.update_cls(new_track.cls, new_track.score)
 
-        in_roi = self.point_in_roi(bec, self.roi)
+        if self.roi:
+            in_roi = self.point_in_roi(bec, self.roi)
         
-        if in_roi:
-            self.in_roi = True
-            self.was_in_roi = True
+            if in_roi:
+                self.in_roi = True
+                self.was_in_roi = True
 
-            if self.was_out_roi:
-                if self.in_crossing_id is None:
-                    self.in_crossing_id = self.check_crossing(self.path_history, self.roi, leaving=False)
-                    print("Entering roi via crossing", self.in_crossing_id)
+                if self.was_out_roi:
+                    if self.in_crossing_id is None:
+                        self.in_crossing_id = self.check_crossing(self.path_history, self.roi, leaving=False)
+                        # print("Entering roi via crossing", self.in_crossing_id)
+                        message = {"frontier": self.in_crossing_id,
+                                "action": 0}
+                        return message
+            else:
+                self.was_out_roi = True
+                self.in_roi = False
 
-        else:
-            self.was_out_roi = True
-            self.in_roi = False
+        return {}
 
     def track_left(self):
+        if self.state == TrackState.Removed:
+            return {}
         if self.was_in_roi:
             self.out_crossing_id = self.check_crossing(self.path_history, self.roi, leaving=True)
-            print("Leaving roi via crossing", self.out_crossing_id)
+            # print("Leaving roi via crossing", self.out_crossing_id)
+            message = {"frontier": self.out_crossing_id,
+                       "action": 1}
+            return message
+        return {}
 
     
     @staticmethod
     def check_crossing(path, polygon, leaving = True):
 
         num_vertices = len(polygon)
-        lines = [(polygon[i], polygon[i - 1]) for i in range(num_vertices)]
+        #TODO DESMARTELAR
+        lines = [(polygon[i-3], polygon[i - 4]) for i in range(num_vertices)]
         path_len = len(path)
         cross_id = None
 
@@ -415,6 +426,9 @@ class BoTSORT(object):
         self.roi = roi
 
     def update(self, output_results, img):
+
+        events = []
+
         self.frame_id += 1
         activated_starcks = []
         refind_stracks = []
@@ -519,7 +533,9 @@ class BoTSORT(object):
             track = strack_pool[itracked]
             det = detections[idet]
             if track.state == TrackState.Tracked:
-                track.update(detections[idet], self.frame_id)
+                message = track.update(detections[idet], self.frame_id)
+                if message:
+                    events.append(message)
                 activated_starcks.append(track)
             else:
                 track.re_activate(det, self.frame_id, new_id=False)
@@ -553,7 +569,9 @@ class BoTSORT(object):
             track = r_tracked_stracks[itracked]
             det = detections_second[idet]
             if track.state == TrackState.Tracked:
-                track.update(det, self.frame_id)
+                message = track.update(det, self.frame_id)
+                if message:
+                    events.append(message)
                 activated_starcks.append(track)
             else:
                 track.re_activate(det, self.frame_id, new_id=False)
@@ -564,7 +582,6 @@ class BoTSORT(object):
             if not track.state == TrackState.Lost:
                 track.mark_lost()
                 lost_stracks.append(track)
-
         '''Deal with unconfirmed tracks, usually tracks with only one beginning frame'''
         detections = [detections[i] for i in u_detection]
         dists = matching.iou_distance(unconfirmed, detections)
@@ -572,13 +589,15 @@ class BoTSORT(object):
             dists = matching.fuse_score(dists, detections)
         matches, u_unconfirmed, u_detection = matching.linear_assignment(dists, thresh=0.7)
         for itracked, idet in matches:
-            unconfirmed[itracked].update(detections[idet], self.frame_id)
+            message = unconfirmed[itracked].update(detections[idet], self.frame_id)
+            if message:
+                events.append(message)
             activated_starcks.append(unconfirmed[itracked])
         for it in u_unconfirmed:
             #Removed Tracks
             track = unconfirmed[it]
+            # message = track.track_left()
             track.mark_removed()
-            track.track_left()
             removed_stracks.append(track)
 
         """ Step 4: Init new stracks"""
@@ -594,8 +613,10 @@ class BoTSORT(object):
         for track in self.lost_stracks:
             if self.frame_id - track.end_frame > self.max_time_lost:
                 #Removed Tracks
+                message = track.track_left()
                 track.mark_removed()
-                track.track_left()
+                if message:
+                    events.append(message)
                 removed_stracks.append(track)
 
 
@@ -613,7 +634,7 @@ class BoTSORT(object):
         output_stracks = [track for track in self.tracked_stracks]
 
 
-        return output_stracks
+        return output_stracks, events
     
     def get_tracks_np(self):
         tracks = []

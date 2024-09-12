@@ -18,10 +18,10 @@ parser.add_argument("--fuse", dest="fuse", default=False, action="store_true", h
 parser.add_argument("--trt", dest="trt", default=False, action="store_true", help="Using TensorRT model for testing.")
 
 # tracking args
-parser.add_argument("--track_high_thresh", type=float, default=0.6, help="tracking confidence threshold")
+parser.add_argument("--track_high_thresh", type=float, default=0.1, help="tracking confidence threshold")
 parser.add_argument("--track_low_thresh", default=0.1, type=float, help="lowest detection threshold")
-parser.add_argument("--new_track_thresh", default=0.7, type=float, help="new track thresh")
-parser.add_argument("--track_buffer", type=int, default=30, help="the frames for keep lost tracks")
+parser.add_argument("--new_track_thresh", default=0.3, type=float, help="new track thresh")
+parser.add_argument("--track_buffer", type=int, default=1, help="the frames for keep lost tracks")
 parser.add_argument("--match_thresh", type=float, default=0.8, help="matching threshold for tracking")
 parser.add_argument('--min_box_area', type=float, default=10, help='filter out tiny boxes')
 parser.add_argument("--fuse-score", dest="fuse_score", default=False, action="store_true", help="fuse score and iou for association")
