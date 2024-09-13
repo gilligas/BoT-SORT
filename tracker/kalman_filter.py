@@ -119,7 +119,6 @@ class KalmanFilter(object):
         mean = np.dot(mean, self._motion_mat.T)
         covariance = np.linalg.multi_dot((
             self._motion_mat, covariance, self._motion_mat.T)) + motion_cov
-
         return mean, covariance
 
     def project(self, mean, covariance):
