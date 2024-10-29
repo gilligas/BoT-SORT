@@ -34,7 +34,7 @@ class STrack(BaseTrack):
         self.features = deque([], maxlen=feat_history)
         self.alpha = 0.9
 
-        self.roi = []
+        self.rois = []
         self.path_history = []
         self.in_roi = False
         self.last_crossing = 0
@@ -155,8 +155,16 @@ class STrack(BaseTrack):
         
         new_tlwh = new_track.tlwh
         bec = self.tlwh_to_bec(new_tlwh)
+        
+        points_in_roi = {}
+        for id, roi in self.rois.items():
+            if self.point_in_roi(bec, roi):
+                points_in_roi[id] = True
+            else:
+                points_in_roi[id] = False
 
-        self.path_history.append(bec)
+        self.path_history.append({"point": bec, 
+                                  "in_roi": points_in_roi})
 
         self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, self.tlwh_to_xywh(new_tlwh))
 
@@ -169,35 +177,38 @@ class STrack(BaseTrack):
         self.score = new_track.score
         self.update_cls(new_track.cls, new_track.score)
 
-        if self.roi:
-            in_roi = self.point_in_roi(bec, self.roi)
-        
-            if in_roi:
-                self.in_roi = True
-                self.was_in_roi = True
+        if self.rois:
 
-                if self.was_out_roi:
-                    if self.in_crossing_id is None:
-                        self.in_crossing_id = self.check_crossing(self.path_history, self.roi, leaving=False)
-                        # print("Entering roi via crossing", self.in_crossing_id)
-                        message = {"frontier": self.in_crossing_id,
-                                "action": 0}
-                        return message
-            else:
-                self.was_out_roi = True
-                self.in_roi = False
+            if len(self.path_history) < 2:
+                return {}
+            
+            current_point = self.path_history[-1]
+            previous_point = self.path_history[-2]
+            
+            for id, roi in self.rois.items():
 
-        return {}
+                if current_point["in_roi"][id] and (not previous_point["in_roi"][id]):
+                    self.in_crossing_id = self.check_crossing([previous_point["point"], current_point["point"]], 
+                                                              roi, 
+                                                              leaving=False)
+                    message = {
+                        "roi": id,
+                        "frontier": self.in_crossing_id,
+                        "class": int(self.cls),
+                        "action": 0}
+                    return message
+                
+                if (not current_point["in_roi"][id]) and previous_point["in_roi"][id]:
+                    self.out_crossing_id = self.check_crossing([previous_point["point"], current_point["point"]], 
+                                                               roi, 
+                                                               leaving=True)
+                    message = {
+                        "roi": id,
+                        "frontier": self.out_crossing_id,
+                        "class": int(self.cls),
+                        "action": 1}
+                    return message
 
-    def track_left(self):
-        if self.state == TrackState.Removed:
-            return {}
-        if self.was_in_roi:
-            self.out_crossing_id = self.check_crossing(self.path_history, self.roi, leaving=True)
-            # print("Leaving roi via crossing", self.out_crossing_id)
-            message = {"frontier": self.out_crossing_id,
-                       "action": 1}
-            return message
         return {}
 
     
@@ -393,7 +404,7 @@ class STrack(BaseTrack):
 
 
 class BoTSORT(object):
-    def __init__(self, args, frame_rate=5, roi = []):
+    def __init__(self, args, frame_rate=5, rois = []):
 
         self.tracked_stracks = []  # type: list[STrack]
         self.lost_stracks = []  # type: list[STrack]
@@ -421,7 +432,7 @@ class BoTSORT(object):
         self.gmc = GMC(method=args.cmc_method, verbose=[args.name, args.ablation])
 
         #roi
-        self.roi = roi
+        self.rois = rois
 
     def update(self, output_results, img):
 
@@ -486,8 +497,8 @@ class BoTSORT(object):
                 tracked_stracks.append(track)
             
             #TODO this is not very elegant
-            if not track.roi:
-                track.roi = self.roi
+            if not track.rois:
+                track.rois = self.rois
             
         ''' Step 2: First association, with high score detection boxes'''
         strack_pool = joint_stracks(tracked_stracks, self.lost_stracks)
@@ -611,10 +622,7 @@ class BoTSORT(object):
         for track in self.lost_stracks:
             if self.frame_id - track.end_frame > self.max_time_lost:
                 #Removed Tracks
-                message = track.track_left()
                 track.mark_removed()
-                if message:
-                    events.append(message)
                 removed_stracks.append(track)
 
 
