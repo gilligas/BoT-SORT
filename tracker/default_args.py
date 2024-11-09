@@ -20,7 +20,7 @@ class Args:
         # Tracking arguments
         self.track_high_thresh = 0.0
         self.track_low_thresh = 0.1
-        self.new_track_thresh = 0.7
+        self.new_track_thresh = 0.3
         self.track_buffer = 5
         self.match_thresh = 0.1
         self.min_box_area = 10
