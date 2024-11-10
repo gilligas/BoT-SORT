@@ -650,7 +650,7 @@ class BoTSORT(object):
                             track.tlwh[0]+track.tlwh[2],
                             track.tlwh[1]+track.tlwh[3], 
                             track.score, 
-                            0, 
+                            track.cls, 
                             track.track_id])
         return np.array(tracks)
     
