@@ -6,7 +6,7 @@ from tracker.gmc import GMC
 from tracker.basetrack import BaseTrack, TrackState
 from tracker.kalman_filter import KalmanFilter
 
-from fast_reid.fast_reid_interfece import FastReIDInterface
+#from fast_reid.fast_reid_interfece import FastReIDInterface
 
 
 class STrack(BaseTrack):
