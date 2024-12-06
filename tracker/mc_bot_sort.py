@@ -6,6 +6,8 @@ from tracker.gmc import GMC
 from tracker.basetrack import BaseTrack, TrackState
 from tracker.kalman_filter import KalmanFilter
 
+from copy import deepcopy
+
 #from fast_reid.fast_reid_interfece import FastReIDInterface
 
 
@@ -42,6 +44,8 @@ class STrack(BaseTrack):
         self.in_crossing_id = None
         self.was_out_roi = False
         self.out_crossing_id = None
+
+        self.messages = {}
 
 
     def update_features(self, feat):
@@ -196,6 +200,8 @@ class STrack(BaseTrack):
                         "frontier": self.in_crossing_id,
                         "class": int(self.cls),
                         "action": 0}
+                    self.messages[str(id)+"_"+str(self.in_crossing_id)] = deepcopy(message)
+                    #print("messages in track: ", self.messages)
                     return message
                 
                 if (not current_point["in_roi"][id]) and previous_point["in_roi"][id]:
@@ -207,11 +213,14 @@ class STrack(BaseTrack):
                         "frontier": self.out_crossing_id,
                         "class": int(self.cls),
                         "action": 1}
+                    self.messages[str(id)+"_"+str(self.out_crossing_id)] = deepcopy(message)
                     return message
 
         return {}
-
     
+    def get_messages(self):
+        return self.messages
+
     @staticmethod
     def check_crossing(path, polygon, leaving = True):
 
@@ -434,7 +443,7 @@ class BoTSORT(object):
         #roi
         self.rois = rois
 
-    def update(self, output_results, img):
+    def update(self, output_results, img, event_on_lost_track = True):
 
         events = []
 
@@ -543,7 +552,7 @@ class BoTSORT(object):
             det = detections[idet]
             if track.state == TrackState.Tracked:
                 message = track.update(detections[idet], self.frame_id)
-                if message:
+                if message and not event_on_lost_track:
                     events.append(message)
                 activated_starcks.append(track)
             else:
@@ -579,7 +588,7 @@ class BoTSORT(object):
             det = detections_second[idet]
             if track.state == TrackState.Tracked:
                 message = track.update(det, self.frame_id)
-                if message:
+                if message and not event_on_lost_track:
                     events.append(message)
                 activated_starcks.append(track)
             else:
@@ -599,7 +608,7 @@ class BoTSORT(object):
         matches, u_unconfirmed, u_detection = matching.linear_assignment(dists, thresh=0.7)
         for itracked, idet in matches:
             message = unconfirmed[itracked].update(detections[idet], self.frame_id)
-            if message:
+            if message and not event_on_lost_track:
                 events.append(message)
             activated_starcks.append(unconfirmed[itracked])
         for it in u_unconfirmed:
@@ -607,6 +616,11 @@ class BoTSORT(object):
             track = unconfirmed[it]
             # message = track.track_left()
             track.mark_removed()
+            if event_on_lost_track:
+                messages = track.get_messages()
+                #print("MESSAGES IN TRACKER (UNCONFIRMED): ", messages)
+                for msg_id, msg in messages.items():
+                    events.append(msg)
             removed_stracks.append(track)
 
         """ Step 4: Init new stracks"""
@@ -623,6 +637,11 @@ class BoTSORT(object):
             if self.frame_id - track.end_frame > self.max_time_lost:
                 #Removed Tracks
                 track.mark_removed()
+                if event_on_lost_track:
+                    messages = track.get_messages()
+                    #print("MESSAGES IN TRACKER (UPDATE STATE): ", messages)
+                    for msg_id, msg in messages.items():
+                        events.append(msg)
                 removed_stracks.append(track)
 
 
