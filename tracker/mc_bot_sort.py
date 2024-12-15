@@ -195,12 +195,26 @@ class STrack(BaseTrack):
                     self.in_crossing_id = self.check_crossing([previous_point["point"], current_point["point"]], 
                                                               roi, 
                                                               leaving=False)
-                    message = {
+                    if self.in_crossing_id == 2:
+                        message = {
                         "roi": id,
-                        "frontier": self.in_crossing_id,
+                        "frontier": 0,
                         "class": int(self.cls),
-                        "action": 0}
-                    self.messages[str(id)+"_"+str(self.in_crossing_id)] = deepcopy(message)
+                        "action": 1,
+                        "track_id": self.track_id}
+                        msg_key = str(id)+"_"+str(0)
+                        if msg_key not in self.messages:
+                            self.messages[str(id)+"_"+str(0)] = deepcopy(message)
+                    else:
+                        message = {
+                            "roi": id,
+                            "frontier": self.in_crossing_id,
+                            "class": int(self.cls),
+                            "action": 0,
+                            "track_id": self.track_id}
+                        msg_key = str(id)+"_"+str(self.in_crossing_id)
+                        if msg_key not in self.messages:
+                            self.messages[str(id)+"_"+str(self.in_crossing_id)] = deepcopy(message)
                     #print("messages in track: ", self.messages)
                     return message
                 
@@ -208,12 +222,27 @@ class STrack(BaseTrack):
                     self.out_crossing_id = self.check_crossing([previous_point["point"], current_point["point"]], 
                                                                roi, 
                                                                leaving=True)
-                    message = {
+                    if self.out_crossing_id == 2:
+                        message = {
                         "roi": id,
-                        "frontier": self.out_crossing_id,
+                        "frontier": 0,
                         "class": int(self.cls),
-                        "action": 1}
-                    self.messages[str(id)+"_"+str(self.out_crossing_id)] = deepcopy(message)
+                        "action": 0,
+                        "track_id": self.track_id}
+                        msg_key = str(id)+"_"+str(0)
+                        if msg_key not in self.messages:
+                            self.messages[str(id)+"_"+str(0)] = deepcopy(message)
+                    else:
+                        message = {
+                            "roi": id,
+                            "frontier": self.out_crossing_id,
+                            "class": int(self.cls),
+                            "action": 1,
+                            "track_id": self.track_id}
+                        msg_key = str(id)+"_"+str(self.out_crossing_id)
+                        if msg_key not in self.messages:
+                            self.messages[str(id)+"_"+str(self.out_crossing_id)] = deepcopy(message)
+                    
                     return message
 
         return {}
@@ -616,11 +645,11 @@ class BoTSORT(object):
             track = unconfirmed[it]
             # message = track.track_left()
             track.mark_removed()
-            if event_on_lost_track:
-                messages = track.get_messages()
+            # if event_on_lost_track:
+            #     messages = track.get_messages()
                 #print("MESSAGES IN TRACKER (UNCONFIRMED): ", messages)
-                for msg_id, msg in messages.items():
-                    events.append(msg)
+                # for msg_id, msg in messages.items():
+                #     events.append(msg)
             removed_stracks.append(track)
 
         """ Step 4: Init new stracks"""
@@ -636,12 +665,13 @@ class BoTSORT(object):
         for track in self.lost_stracks:
             if self.frame_id - track.end_frame > self.max_time_lost:
                 #Removed Tracks
-                track.mark_removed()
-                if event_on_lost_track:
+                if event_on_lost_track and track.state != TrackState.Removed:
                     messages = track.get_messages()
                     #print("MESSAGES IN TRACKER (UPDATE STATE): ", messages)
                     for msg_id, msg in messages.items():
+                        msg["state"] = track.state
                         events.append(msg)
+                track.mark_removed()
                 removed_stracks.append(track)
 
 
